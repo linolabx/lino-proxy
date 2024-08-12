@@ -2,7 +2,7 @@ name: build single-site-proxy
 
 on:
   push:
-    branches: ["master"]
+    branches: ["main"]
     paths:
       - cmd/single-site-proxy/**
       - .github/workflows/single-site-proxy.yml
