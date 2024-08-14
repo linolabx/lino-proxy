@@ -1,11 +1,15 @@
 package main
 
 import (
+	"bytes"
 	"flag"
+	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"strconv"
 )
 
 var (
@@ -14,12 +18,15 @@ var (
 	targetURL *url.URL
 	proxy     string
 	proxyURL  *url.URL
+
+	redirectToSuccess bool
 )
 
 func init() {
 	flag.StringVar(&listen, "listen", ":80", "port to listen on")
 	flag.StringVar(&target, "target", "https://api.openai.com", "target website")
 	flag.StringVar(&proxy, "proxy", "", "proxy server")
+	flag.BoolVar(&redirectToSuccess, "redirect-to-success", false, "when enabled, all 301/302 redirects will be directly reponse with 200 OK")
 }
 
 func ReverseProxyHandler(w http.ResponseWriter, r *http.Request) {
@@ -29,6 +36,20 @@ func ReverseProxyHandler(w http.ResponseWriter, r *http.Request) {
 		req.URL.Scheme = targetURL.Scheme
 		req.URL.Host = targetURL.Host
 		req.Host = targetURL.Host
+	}
+
+	if redirectToSuccess {
+		rproxy.ModifyResponse = func(resp *http.Response) error {
+			if resp.StatusCode == http.StatusMovedPermanently || resp.StatusCode == http.StatusFound {
+				msg := fmt.Sprintf("%s<br>\nSource site tries to redirect to %s<br>\n", resp.Status, resp.Header.Get("Location"))
+				resp.Body = io.NopCloser(bytes.NewReader([]byte(msg)))
+				resp.ContentLength = int64(len(msg))
+				resp.Header.Set("Content-Length", strconv.FormatInt(resp.ContentLength, 10))
+				resp.Header.Del("Location")
+				resp.StatusCode = http.StatusOK
+			}
+			return nil
+		}
 	}
 
 	if proxy != "" {
